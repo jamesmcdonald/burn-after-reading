@@ -27,8 +27,8 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		URL string
 	}{
 		ID: id,
-		// TODO Maybe fix the scheme here
-		URL: fmt.Sprintf("http://%s/pop?i=%d&s=%s", r.Host, id, sharedSecret),
+		// TODO This won't work if the server isn't behind a proxy
+		URL: fmt.Sprintf("https://%s/pop?i=%d&s=%s", r.Host, id, sharedSecret),
 	})
 	if err != nil {
 		w.Write([]byte(fmt.Sprintf("Error: %s", err)))
