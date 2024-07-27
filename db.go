@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"time"
 )
 
 func (a *App) Create(ctx context.Context) error {
@@ -25,24 +26,33 @@ func (a *App) Create(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) Prune(ctx context.Context) error {
+func (a *App) Prune(ctx context.Context) (int64, error) {
 	res, err := a.DB.Exec(ctx, `delete from secret where expires_at < now()`)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	count := res.RowsAffected()
-	if count > 0 {
-		slog.Info("Pruned expired secrets", "count", count)
-	}
-	return nil
+	return count, nil
+}
+
+func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
+	go func() {
+		for {
+			count, err := a.Prune(ctx)
+			if err != nil {
+				slog.Error("Failed to prune", "error", err)
+			}
+			slog.Debug("Pruned expired secrets", "count", count, "interval", interval)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(interval):
+			}
+		}
+	}()
 }
 
 func (a *App) AddSecret(ctx context.Context, secret string) (int, string, error) {
-	err := a.Prune(ctx)
-	if err != nil {
-		return 0, "", err
-	}
-
 	query := `with pw as (
 		select encode(digest(gen_random_bytes(1024), 'sha-256'), 'hex') as pw
 	)
@@ -53,7 +63,7 @@ func (a *App) AddSecret(ctx context.Context, secret string) (int, string, error)
 	result := a.DB.QueryRow(ctx, query, secret)
 	var id int
 	var sharedSecret string
-	err = result.Scan(&id, &sharedSecret)
+	err := result.Scan(&id, &sharedSecret)
 	if err != nil {
 		return 0, "", err
 	}
@@ -61,14 +71,10 @@ func (a *App) AddSecret(ctx context.Context, secret string) (int, string, error)
 }
 
 func (a *App) PopSecret(ctx context.Context, id int, sharedSecret string) (string, error) {
-	err := a.Prune(ctx)
-	if err != nil {
-		return "", err
-	}
 	query := `select pgp_sym_decrypt(data, $1) from secret where id=$2`
 	result := a.DB.QueryRow(ctx, query, sharedSecret, id)
 	var secret string
-	err = result.Scan(&secret)
+	err := result.Scan(&secret)
 	if err != nil {
 		return "", err
 	}

@@ -5,7 +5,9 @@ import (
 	"context"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"os"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -16,6 +18,7 @@ type App struct {
 }
 
 func main() {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
 	pgOwnerUser := cmp.Or(os.Getenv("PGOWNERUSER"), os.Getenv("PGUSER"), os.Getenv("PGDATABASE")+"_owner_user")
 	pgWriterUser := cmp.Or(os.Getenv("PGWRITERUSER"), os.Getenv("PGUSER"), os.Getenv("PGDATABASE")+"_writer_user")
 
@@ -48,5 +51,6 @@ func main() {
 	defer conn.Close()
 	app.DB = conn
 
+	app.StartPruner(ctx, 1*time.Hour)
 	app.Serve()
 }
