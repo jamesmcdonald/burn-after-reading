@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"html/template"
+	"log/slog"
 	"net/http"
 	"strconv"
 )
@@ -53,11 +54,14 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 	}
 	secret, err := a.PopSecret(r.Context(), id, sharedSecret)
 	if err != nil {
-		if err.Error() == "no rows in result set" {
+		switch err.Error() {
+		// Return 404 if the secret is not found or if the key is wrong
+		case "no rows in result set", "ERROR: Wrong key or corrupt data (SQLSTATE 39000)":
 			http.Error(w, "Not found", http.StatusNotFound)
-			return
+		default:
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			slog.Error(err.Error())
 		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	err = a.TemplateHandler.ExecuteTemplate(w, "show.html", struct {
