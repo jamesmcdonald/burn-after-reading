@@ -12,9 +12,16 @@ import (
 //go:embed templates/*
 var templates embed.FS
 
+const MaxSecretSize = 1 << 16
+
 func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, MaxSecretSize)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Request too large or malformed", http.StatusRequestEntityTooLarge)
 		return
 	}
 	secret := r.FormValue("secret")

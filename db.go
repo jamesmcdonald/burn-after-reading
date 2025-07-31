@@ -7,11 +7,17 @@ import (
 )
 
 func (a *App) Create(ctx context.Context) error {
-	_, err := a.DB.Exec(ctx, `create extension if not exists pgcrypto`)
+	tx, err := a.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	_, err = a.DB.Exec(ctx, `create table if not exists secret (
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, `create extension if not exists pgcrypto`)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `create table if not exists secret (
 		id serial not null primary key,
 		data bytea not null,
 		expires_at timestamp with time zone default now() + interval '1 day'
@@ -19,8 +25,11 @@ func (a *App) Create(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	_, err = a.DB.Exec(ctx, `create index if not exists secret_expires_at on secret (expires_at)`)
+	_, err = tx.Exec(ctx, `create index if not exists secret_expires_at on secret (expires_at)`)
 	if err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 	return nil
@@ -71,15 +80,22 @@ func (a *App) AddSecret(ctx context.Context, secret string) (int, string, error)
 }
 
 func (a *App) PopSecret(ctx context.Context, id int, sharedSecret string) (string, error) {
-	query := `select pgp_sym_decrypt(data, $1) from secret where id=$2`
-	result := a.DB.QueryRow(ctx, query, sharedSecret, id)
-	var secret string
-	err := result.Scan(&secret)
+	tx, err := a.DB.Begin(ctx)
 	if err != nil {
 		return "", err
 	}
-	_, err = a.DB.Exec(ctx, `delete from secret where id = $1`, id)
+	query := `select pgp_sym_decrypt(data, $1) from secret where id=$2`
+	result := tx.QueryRow(ctx, query, sharedSecret, id)
+	var secret string
+	err = result.Scan(&secret)
 	if err != nil {
+		return "", err
+	}
+	_, err = tx.Exec(ctx, `delete from secret where id = $1`, id)
+	if err != nil {
+		return "", err
+	}
+	if err := tx.Commit(ctx); err != nil {
 		return "", err
 	}
 	return secret, nil
