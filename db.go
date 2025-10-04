@@ -78,16 +78,14 @@ type token struct {
 	version byte
 	alg     byte
 	locator []byte
-	nonce   []byte
 	key     []byte
 }
 
 func (t token) pack() []byte {
-	raw := make([]byte, 0, 1+1+len(t.locator)+len(t.nonce)+len(t.key))
+	raw := make([]byte, 0, 1+1+len(t.locator)+len(t.key))
 	raw = append(raw, versionByte)
 	raw = append(raw, t.alg)
 	raw = append(raw, t.locator...)
-	raw = append(raw, t.nonce...)
 	raw = append(raw, t.key...)
 	return raw
 }
@@ -102,23 +100,13 @@ func parseToken(tokenBytes []byte) (token, error) {
 		return token{}, fmt.Errorf("unsupported version %d", t.version)
 	}
 	t.alg = tokenBytes[1]
-	var nonceLen int
-	switch t.alg {
-	case algXChaCha:
-		nonceLen = chacha20poly1305.NonceSizeX
-	case algPGPAES:
-		nonceLen = 0
-	default:
-		return t, fmt.Errorf("unknown algorithm %d", t.alg)
-	}
 
-	if len(tokenBytes) < 1+1+16+nonceLen+1 {
+	if len(tokenBytes) < 1+1+16+1 {
 		return t, fmt.Errorf("short token")
 	}
 	t.locator = tokenBytes[2:18]
-	t.nonce = tokenBytes[18 : 18+nonceLen]
-	t.key = tokenBytes[18+nonceLen:]
-	fmt.Printf("%x %x %x %x %x\n", t.version, t.alg, t.locator, t.nonce, t.key)
+	t.key = tokenBytes[18:]
+	//fmt.Printf("%x %x %x %x\n", t.version, t.alg, t.locator, t.key)
 	return t, nil
 }
 
@@ -163,11 +151,11 @@ func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, e
 		if err != nil {
 			return nil, err
 		}
-		t.nonce = make([]byte, aead.NonceSize(), aead.NonceSize()+len(secret)+aead.Overhead())
-		if _, err := rand.Read(t.nonce); err != nil {
+		nonce := make([]byte, aead.NonceSize(), aead.NonceSize()+len(secret)+aead.Overhead())
+		if _, err := rand.Read(nonce); err != nil {
 			return nil, err
 		}
-		encrypted := aead.Seal(t.nonce, t.nonce, []byte(secret), t.locator)
+		encrypted := aead.Seal(nonce, nonce, []byte(secret), t.locator)
 		query := `insert into secret(locator, data) values ($1, $2)`
 		_, err = a.DB.Exec(ctx, query, t.locator, encrypted)
 		if err != nil {
@@ -221,8 +209,9 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		fmt.Printf("%x\n", data)
-		secret, err := aead.Open(nil, t.nonce, data, t.locator)
+		nonce := data[0:aead.NonceSize()]
+		ciphertext := data[aead.NonceSize():]
+		secret, err := aead.Open(nil, nonce, ciphertext, t.locator)
 		if err != nil {
 			return "", err
 		}
