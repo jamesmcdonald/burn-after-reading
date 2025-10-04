@@ -35,7 +35,7 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		URL string
 	}{
 		// TODO This won't work if the server isn't behind a proxy
-		URL: fmt.Sprintf("//%s/pop/%s", r.Host, urlToken),
+		URL: fmt.Sprintf("https://%s/pop/%s", r.Host, urlToken),
 	})
 	if err != nil {
 		fmt.Fprintf(w, "Error: %s", err)
