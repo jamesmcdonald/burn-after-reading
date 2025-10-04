@@ -25,7 +25,7 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	secret := r.FormValue("secret")
-	id, sharedSecret, err := a.AddSecret(r.Context(), secret)
+	id, sharedSecret, err := a.AddSecret(r.Context(), secret, 1)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -85,10 +85,11 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) Serve() {
 	a.TemplateHandler = template.Must(template.ParseFS(templates, "templates/*.html"))
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		a.TemplateHandler.ExecuteTemplate(w, "index.html", nil)
 	})
-	http.HandleFunc("/add", a.HandleAddSecret)
-	http.HandleFunc("/pop", a.HandlePopSecret)
-	http.ListenAndServe(":8080", nil)
+	mux.HandleFunc("POST /add", a.HandleAddSecret)
+	mux.HandleFunc("GET /pop/{token}", a.HandlePopSecret)
+	http.ListenAndServe(":8080", mux)
 }

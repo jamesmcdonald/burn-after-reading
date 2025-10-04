@@ -2,8 +2,18 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"log/slog"
 	"time"
+
+	"golang.org/x/crypto/chacha20poly1305"
+)
+
+const (
+	versionByte byte = 1
+	algPGPAES   byte = 0
+	algXChaCha  byte = 1
 )
 
 func (a *App) Create(ctx context.Context) error {
@@ -19,6 +29,7 @@ func (a *App) Create(ctx context.Context) error {
 	}
 	_, err = tx.Exec(ctx, `create table if not exists secret (
 		id serial not null primary key,
+		locator bytea not null unique,
 		data bytea not null,
 		expires_at timestamp with time zone default now() + interval '1 day'
 	)`)
@@ -46,6 +57,8 @@ func (a *App) Prune(ctx context.Context) (int64, error) {
 
 func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
 	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
 		for {
 			count, err := a.Prune(ctx)
 			if err != nil {
@@ -55,15 +68,56 @@ func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(interval):
+			case <-ticker.C:
 			}
 		}
 	}()
 }
 
-func (a *App) AddSecret(ctx context.Context, secret string) (int, string, error) {
+func (a *App) AddSecretNew(ctx context.Context, secret string, alg byte) (int, string, error) {
+	switch alg {
+	case algXChaCha:
+		locator := make([]byte, 16)
+		if _, err := rand.Read(locator); err != nil {
+			return 0, "", err
+		}
+		key := make([]byte, chacha20poly1305.KeySize)
+		if _, err := rand.Read(key); err != nil {
+			return 0, "", err
+		}
+		aead, err := chacha20poly1305.NewX(key)
+		if err != nil {
+			return 0, "", err
+		}
+		nonce := make([]byte, aead.NonceSize(), aead.NonceSize()+len(secret)+aead.Overhead())
+		if _, err := rand.Read(nonce); err != nil {
+			return 0, "", err
+		}
+		encrypted := aead.Seal(nonce, nonce, []byte(secret), locator)
+		var id int
+		query := `insert into secret(locator, data) values ($1, $2) returning id`
+		err = a.DB.QueryRow(ctx, query, locator, encrypted).Scan(&id)
+		if err != nil {
+			return 0, "", err
+		}
+		raw := make([]byte, 0, 1+1+16+aead.NonceSize()+chacha20poly1305.KeySize)
+		raw = append(raw, versionByte)
+		raw = append(raw, alg)
+		raw = append(raw, locator...)
+		raw = append(raw, nonce...)
+		raw = append(raw, key...)
+		return id, string(raw), nil
+	default:
+		return 0, "", fmt.Errorf("unsupported algorithm")
+	}
+}
+
+func (a *App) AddSecret(ctx context.Context, secret string, alg byte) (int, string, error) {
+	if alg != algPGPAES {
+		return a.AddSecretNew(ctx, secret, alg)
+	}
 	query := `with pw as (
-		select encode(digest(gen_random_bytes(1024), 'sha-256'), 'hex') as pw
+		select encode(gen_random_bytes(32), 'hex') as pw
 	)
 	insert into secret(data)
     values (pgp_sym_encrypt($1, (select pw from pw), 'cipher-algo=aes256'))

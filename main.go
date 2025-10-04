@@ -26,7 +26,7 @@ func main() {
 	pgWriterPassword := cmp.Or(os.Getenv("PGWRITERPASSWORD"), os.Getenv("PGPASSWORD"))
 
 	ctx := context.Background()
-	conn, err := pgxpool.New(ctx, fmt.Sprintf("user=%s password=%s", pgOwnerUser, pgOwnerPassword))
+	conn, err := pgxpool.New(ctx, fmt.Sprintf("application_name=burn-after-reading user=%s password=%s", pgOwnerUser, pgOwnerPassword))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
@@ -43,7 +43,7 @@ func main() {
 	}
 	conn.Close()
 
-	conn, err = pgxpool.New(ctx, fmt.Sprintf("user=%s password=%s", pgWriterUser, pgWriterPassword))
+	conn, err = pgxpool.New(ctx, fmt.Sprintf("application_name=burn-after-reading user=%s password=%s", pgWriterUser, pgWriterPassword))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
