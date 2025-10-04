@@ -2,11 +2,11 @@ package main
 
 import (
 	"embed"
+	"encoding/base64"
 	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
-	"strconv"
 )
 
 //go:embed templates/*
@@ -25,21 +25,20 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	secret := r.FormValue("secret")
-	id, sharedSecret, err := a.AddSecret(r.Context(), secret, 1)
+	sharedSecret, err := a.AddSecret(r.Context(), secret, 1)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	urlToken := base64.URLEncoding.EncodeToString(sharedSecret)
 	err = a.TemplateHandler.ExecuteTemplate(w, "add.html", struct {
-		ID  int
 		URL string
 	}{
-		ID: id,
 		// TODO This won't work if the server isn't behind a proxy
-		URL: fmt.Sprintf("https://%s/pop?i=%d&s=%s", r.Host, id, sharedSecret),
+		URL: fmt.Sprintf("//%s/pop/%s", r.Host, urlToken),
 	})
 	if err != nil {
-		w.Write([]byte(fmt.Sprintf("Error: %s", err)))
+		fmt.Fprintf(w, "Error: %s", err)
 	}
 }
 
@@ -48,18 +47,17 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	sharedSecret := r.FormValue("s")
-	idstring := r.FormValue("i")
-	if sharedSecret == "" || idstring == "" {
+	token := r.PathValue("token")
+	if token == "" {
 		http.Error(w, "missing parameters", http.StatusBadRequest)
 		return
 	}
-	id, err := strconv.Atoi(idstring)
+	tbytes, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
-		http.Error(w, "invalid id", http.StatusBadRequest)
+		http.Error(w, "Bad token", http.StatusBadRequest)
 		return
 	}
-	secret, err := a.PopSecret(r.Context(), id, sharedSecret)
+	secret, err := a.PopSecret(r.Context(), string(tbytes))
 	if err != nil {
 		switch err.Error() {
 		// Return 404 if the secret is not found or if the key is wrong
@@ -72,14 +70,12 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = a.TemplateHandler.ExecuteTemplate(w, "show.html", struct {
-		ID     int
 		Secret string
 	}{
-		ID:     id,
 		Secret: secret,
 	})
 	if err != nil {
-		w.Write([]byte(fmt.Sprintf("Error: %s", err)))
+		fmt.Fprintf(w, "Error: %s", err)
 	}
 }
 
