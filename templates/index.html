@@ -18,8 +18,8 @@
 
     <p>Secrets will expire 24 hours after they were created.</p>
 
-    <p><b>Note:</b> The secrets are encrypted in the database using AES-256
-      with symmetric GPG using the shared key you get in your URL. I don't
+    <p><b>Note:</b> The secrets are encrypted in the database using XChaCha20-Poly1305
+      using the shared key you get in your URL. I don't
       store or log that shared key, but you should decide for yourself whether
       you trust me before using this for secrets you care about.</p>
 
