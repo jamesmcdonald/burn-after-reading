@@ -1,9 +1,9 @@
 module github.com/jamesmcdonald/burn-after-reading
 
-go 1.24.0
+go 1.25
 
 require (
-	github.com/jackc/pgx/v5 v5.7.5
+	github.com/jackc/pgx/v5 v5.7.6
 	golang.org/x/crypto v0.42.0
 )
 
