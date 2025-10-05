@@ -5,12 +5,10 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html/template"
+	"io/fs"
 	"log/slog"
 	"net/http"
 )
-
-//go:embed templates/*
-var templates embed.FS
 
 const MaxSecretSize = 1 << 16
 
@@ -79,9 +77,20 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+//go:embed templates/*
+var templates embed.FS
+
+//go:embed web/assets/*
+var assets embed.FS
+
 func (a *App) Serve() {
 	a.TemplateHandler = template.Must(template.ParseFS(templates, "templates/*.html"))
 	mux := http.NewServeMux()
+	subfs, err := fs.Sub(assets, "web/assets")
+	if err != nil {
+		panic(err)
+	}
+	mux.Handle("GET /assets/", http.StripPrefix("/assets", http.FileServer(http.FS(subfs))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		a.TemplateHandler.ExecuteTemplate(w, "index.html", nil)
 	})
