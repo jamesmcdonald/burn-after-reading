@@ -8,6 +8,7 @@ RUN npm install
 COPY assets ./assets
 COPY templates ./templates
 RUN npm run build
+COPY node_modules/htmx.org/dist/htmx.min.js ./web/assets/htmx.min.js
 
 FROM golang:1.25 AS builder
 
