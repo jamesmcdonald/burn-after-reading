@@ -17,6 +17,8 @@ type App struct {
 	BaseTemplate *template.Template
 }
 
+//go:generate go run genversion.go
+
 func main() {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 	pgOwnerUser := cmp.Or(os.Getenv("PGOWNERUSER"), os.Getenv("PGUSER"), os.Getenv("PGDATABASE")+"_owner_user")

@@ -13,7 +13,7 @@ import (
 
 const MaxSecretSize = 1 << 16
 
-func (a *App) render(w io.Writer, page string, data any) error {
+func (a *App) render(w io.Writer, page string, data map[string]any) error {
 	t, err := a.BaseTemplate.Clone()
 	if err != nil {
 		return err
@@ -22,6 +22,12 @@ func (a *App) render(w io.Writer, page string, data any) error {
 	if err != nil {
 		return err
 	}
+
+	if data == nil {
+		data = make(map[string]any)
+	}
+	data["Version"] = Version
+	data["Commit"] = Commit
 
 	return t.ExecuteTemplate(w, "base", data)
 }
@@ -43,11 +49,9 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	urlToken := base64.URLEncoding.EncodeToString(sharedSecret)
-	err = a.render(w, "add", struct {
-		URL string
-	}{
+	err = a.render(w, "add", map[string]any{
 		// TODO This won't work if the server isn't behind a proxy
-		URL: fmt.Sprintf("https://%s/pop/%s", r.Host, urlToken),
+		"URL": fmt.Sprintf("https://%s/pop/%s", r.Host, urlToken),
 	})
 	if err != nil {
 		fmt.Fprintf(w, "Error: %s", err)
@@ -81,10 +85,8 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	err = a.render(w, "show", struct {
-		Secret string
-	}{
-		Secret: secret,
+	err = a.render(w, "show", map[string]any{
+		"Secret": secret,
 	})
 	if err != nil {
 		fmt.Fprintf(w, "Error: %s", err)

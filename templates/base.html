@@ -12,6 +12,9 @@
     <h1>Burn After Reading</h1>
       {{ template "content" . }}
     </div>
+    <div class="footer mx-auto text-center mt-4 text-sm text-grey-500">
+      <p>Version <a href="https://github.com/jamesmcdonald/burn-after-reading/releases/tag/{{.Version}}">{{.Version}}</a></p>
+    </div>
   </body>
 </html>
 {{ end }}
