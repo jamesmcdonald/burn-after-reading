@@ -1,15 +1,6 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="/assets/style.css">
-    <title>Burn After Reading</title>
-  </head>
-  <body class="text-grey-850 dark:text-grey-100 p-8">
-    <div class="container w-200 mx-auto p-4 rounded border ">
-    <h1>Burn After Reading</h1>
+{{define "title"}}Main{{end}}
 
+{{define "content"}}
     <form action="/add" method="post" class="p-8">
       <label for="secret" class="font-bold mb-2">Share a secret</label><br>
       <textarea id="secret" name="secret" rows="8" cols="80" class="border p-2 w-full"></textarea>
@@ -30,7 +21,4 @@
     <p class="mb-4"><b>Note:</b> The secrets are encrypted using XChaCha20-Poly1305 before being stored in the database. The encryption key is included in the URL you get, and not stored anywhere else. I don't
       store or log it, but you should decide for yourself whether
       you trust this service before using this for secrets you care about.</p>
-    </div>
-
-  </body>
-</html>
+{{end}}

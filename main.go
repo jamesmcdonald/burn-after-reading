@@ -13,8 +13,8 @@ import (
 )
 
 type App struct {
-	DB              *pgxpool.Pool
-	TemplateHandler *template.Template
+	DB           *pgxpool.Pool
+	BaseTemplate *template.Template
 }
 
 func main() {

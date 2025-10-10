@@ -1,16 +1,17 @@
+{{ define "base" }}
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Burn After Reading - Your Secret</title>
+    <title>Burn After Reading - {{ template "title" . }}</title>
     <link href="/assets/style.css" rel="stylesheet">
   </head>
   <body class="text-grey-850 dark:text-grey-100 p-8">
-    <div class="container w-200 mx-auto px-4 rounded border ">
+    <div class="container w-200 mx-auto p-4 rounded border ">
     <h1>Burn After Reading</h1>
-    <p class="mb-4">Your secret contents are below; the secret has been deleted</p>
-    <pre id="secret">{{ .Secret }}</pre>
+      {{ template "content" . }}
     </div>
   </body>
 </html>
+{{ end }}

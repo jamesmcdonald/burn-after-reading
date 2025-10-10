@@ -5,12 +5,26 @@ import (
 	"encoding/base64"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
 )
 
 const MaxSecretSize = 1 << 16
+
+func (a *App) render(w io.Writer, page string, data any) error {
+	t, err := a.BaseTemplate.Clone()
+	if err != nil {
+		return err
+	}
+	_, err = t.ParseFS(templates, "templates/pages/"+page+".html")
+	if err != nil {
+		return err
+	}
+
+	return t.ExecuteTemplate(w, "base", data)
+}
 
 func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -29,7 +43,7 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	urlToken := base64.URLEncoding.EncodeToString(sharedSecret)
-	err = a.TemplateHandler.ExecuteTemplate(w, "add.html", struct {
+	err = a.render(w, "add", struct {
 		URL string
 	}{
 		// TODO This won't work if the server isn't behind a proxy
@@ -67,7 +81,7 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	err = a.TemplateHandler.ExecuteTemplate(w, "show.html", struct {
+	err = a.render(w, "show", struct {
 		Secret string
 	}{
 		Secret: secret,
@@ -84,7 +98,7 @@ var templates embed.FS
 var assets embed.FS
 
 func (a *App) Serve() {
-	a.TemplateHandler = template.Must(template.ParseFS(templates, "templates/*.html"))
+	a.BaseTemplate = template.Must(template.ParseFS(templates, "templates/base.html"))
 	mux := http.NewServeMux()
 	subfs, err := fs.Sub(assets, "web/assets")
 	if err != nil {
@@ -92,7 +106,7 @@ func (a *App) Serve() {
 	}
 	mux.Handle("GET /assets/", http.StripPrefix("/assets", http.FileServer(http.FS(subfs))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		a.TemplateHandler.ExecuteTemplate(w, "index.html", nil)
+		a.render(w, "index", nil)
 	})
 	mux.HandleFunc("POST /add", a.HandleAddSecret)
 	mux.HandleFunc("GET /pop/{token}", a.HandlePopSecret)
