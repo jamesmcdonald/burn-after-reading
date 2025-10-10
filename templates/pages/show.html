@@ -2,7 +2,7 @@
 
 {{define "content"}}
     <p class="mb-4">Click the button to fetch the secret. It will be deleted immediately.</p>
-    <form hx-post="/pop" hx-target="#secret" hx-swap="outerHTML" class="mb-4">
+    <form id="fetch-form" hx-post="/pop" hx-target="#secret" hx-swap="outerHTML" class="mb-4">
         <input type="hidden" name="token" value="{{.Token}}">
         <button type="submit" class="btn btn-primary">Fetch secret</button>
     </form>
