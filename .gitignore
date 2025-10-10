@@ -1,6 +1,6 @@
 /tmp
 /node_modules
-/web
+/public
 version.go
 # Added by goreleaser init:
 dist/

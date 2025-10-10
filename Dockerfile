@@ -1,6 +1,6 @@
 FROM node:22 AS nodebuild
 
-WORKDIR /webbuild
+WORKDIR /app
 
 COPY package.json package-lock.json .
 RUN npm install
@@ -8,13 +8,13 @@ RUN npm install
 COPY assets ./assets
 COPY templates ./templates
 RUN npm run build
-COPY node_modules/htmx.org/dist/htmx.min.js ./web/assets/htmx.min.js
+COPY node_modules/htmx.org/dist/htmx.min.js ./public/assets/htmx.min.js
 
 FROM golang:1.25 AS builder
 
 WORKDIR /app
 COPY . .
-COPY --from=nodebuild /webbuild/web ./web
+COPY --from=nodebuild /app/public ./public
 
 RUN go get ./...
 RUN go generate ./...

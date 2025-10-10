@@ -96,13 +96,13 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 //go:embed templates/*
 var templates embed.FS
 
-//go:embed web/assets/*
+//go:embed public/assets/*
 var assets embed.FS
 
 func (a *App) Serve() {
 	a.BaseTemplate = template.Must(template.ParseFS(templates, "templates/base.html"))
 	mux := http.NewServeMux()
-	subfs, err := fs.Sub(assets, "web/assets")
+	subfs, err := fs.Sub(assets, "public/assets")
 	if err != nil {
 		panic(err)
 	}
