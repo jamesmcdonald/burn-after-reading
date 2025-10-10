@@ -42,6 +42,10 @@ dockers_v2:
   - dockerfile: Dockerfile.goreleaser
     images:
       - ghcr.io/jamesmcdonald/burn-after-reading
+    tags:
+      - "v{{ .Version }}"
+      - "{{ if .IsNightly }}nightly{{ end }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
 
 changelog:
   sort: asc
