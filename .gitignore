@@ -2,3 +2,5 @@
 /node_modules
 /web
 version.go
+# Added by goreleaser init:
+dist/

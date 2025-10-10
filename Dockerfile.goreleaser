@@ -1,0 +1,10 @@
+FROM cgr.dev/chainguard/wolfi-base
+
+ARG TARGETPLATFORM
+
+WORKDIR /app
+COPY $TARGETPLATFORM/burn-after-reading .
+
+EXPOSE 8080
+
+ENTRYPOINT ["./burn-after-reading"]
