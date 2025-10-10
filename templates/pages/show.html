@@ -1,6 +1,11 @@
 {{define "title"}}Your secret{{end}}
 
 {{define "content"}}
-    <p class="mb-4">Your secret contents are below; the secret has been deleted</p>
-    <pre id="secret">{{ .Secret }}</pre>
+    <p class="mb-4">Click the button to fetch the secret. It will be deleted immediately.</p>
+    <form hx-post="/pop" hx-target="#secret" hx-swap="outerHTML" class="mb-4">
+        <input type="hidden" name="token" value="{{.Token}}">
+        <button type="submit" class="btn btn-primary">Fetch secret</button>
+    </form>
+
+    <pre id="secret" class="p-4 border rounded p-3 text-sm whitespace-pre-wrap">[secret not yet fetched]</pre>
 {{end}}

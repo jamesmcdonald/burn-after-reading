@@ -51,7 +51,28 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 	urlToken := base64.URLEncoding.EncodeToString(sharedSecret)
 	err = a.render(w, "add", map[string]any{
 		// TODO This won't work if the server isn't behind a proxy
-		"URL": fmt.Sprintf("https://%s/pop/%s", r.Host, urlToken),
+		"URL": fmt.Sprintf("https://%s/s/%s", r.Host, urlToken),
+	})
+	if err != nil {
+		fmt.Fprintf(w, "Error: %s", err)
+	}
+}
+
+func (a *App) HandleShowSecret(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	token := r.PathValue("token")
+	if token == "" {
+		http.Error(w, "missing parameters", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "no-store")
+	err := a.render(w, "show", map[string]any{
+		"Token": token,
 	})
 	if err != nil {
 		fmt.Fprintf(w, "Error: %s", err)
@@ -59,11 +80,15 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	token := r.PathValue("token")
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	token := r.Form.Get("token")
 	if token == "" {
 		http.Error(w, "missing parameters", http.StatusBadRequest)
 		return
@@ -85,7 +110,15 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	err = a.render(w, "show", map[string]any{
+
+	// w.Header().Set("HX-Trigger", "secretPopped")
+	w.Header().Set("Cache-Control", "no-store")
+	t, err := template.ParseFS(templates, "templates/pages/secret_fragment.html")
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	err = t.ExecuteTemplate(w, "secret_fragment.html", map[string]any{
 		"Secret": secret,
 	})
 	if err != nil {
@@ -111,6 +144,7 @@ func (a *App) Serve() {
 		a.render(w, "index", nil)
 	})
 	mux.HandleFunc("POST /add", a.HandleAddSecret)
-	mux.HandleFunc("GET /pop/{token}", a.HandlePopSecret)
+	mux.HandleFunc("GET /s/{token}", a.HandleShowSecret)
+	mux.HandleFunc("POST /pop", a.HandlePopSecret)
 	http.ListenAndServe(":8080", mux)
 }
