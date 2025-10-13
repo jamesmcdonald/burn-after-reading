@@ -85,21 +85,29 @@ func (a *App) HandleShowSecret(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		a.render(w, "show", "secret", map[string]any{
+			"Error": "method not allowed",
+		})
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
+		a.render(w, "show", "secret", map[string]any{
+			"Error": "bad request",
+		})
 		return
 	}
 	token := r.Form.Get("token")
 	if token == "" {
-		http.Error(w, "missing parameters", http.StatusBadRequest)
+		a.render(w, "show", "secret", map[string]any{
+			"Error": "missing parameters",
+		})
 		return
 	}
 	tbytes, err := base64.URLEncoding.DecodeString(token)
 	if err != nil {
-		http.Error(w, "Bad token", http.StatusBadRequest)
+		a.render(w, "show", "secret", map[string]any{
+			"Error": "bad token",
+		})
 		return
 	}
 	secret, err := a.PopSecret(r.Context(), string(tbytes))
@@ -107,9 +115,13 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 		switch err.Error() {
 		// Return 404 if the secret is not found or if the key is wrong
 		case "no rows in result set", "ERROR: Wrong key or corrupt data (SQLSTATE 39000)":
-			http.Error(w, "Not found", http.StatusNotFound)
+			a.render(w, "show", "secret", map[string]any{
+				"Error": "secret not found",
+			})
 		default:
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			a.render(w, "show", "secret", map[string]any{
+				"Error": "internal server error",
+			})
 			slog.Error(err.Error())
 		}
 		return
