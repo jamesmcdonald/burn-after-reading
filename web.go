@@ -13,7 +13,7 @@ import (
 
 const MaxSecretSize = 1 << 16
 
-func (a *App) render(w io.Writer, page string, data map[string]any) error {
+func (a *App) render(w io.Writer, page string, template string, data map[string]any) error {
 	t, err := a.BaseTemplate.Clone()
 	if err != nil {
 		return err
@@ -29,7 +29,11 @@ func (a *App) render(w io.Writer, page string, data map[string]any) error {
 	data["Version"] = Version
 	data["Commit"] = Commit
 
-	return t.ExecuteTemplate(w, "base", data)
+	if template == "" {
+		template = "base"
+	}
+
+	return t.ExecuteTemplate(w, template, data)
 }
 
 func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
@@ -49,7 +53,7 @@ func (a *App) HandleAddSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	urlToken := base64.URLEncoding.EncodeToString(sharedSecret)
-	err = a.render(w, "add", map[string]any{
+	err = a.render(w, "add", "", map[string]any{
 		// TODO This won't work if the server isn't behind a proxy
 		"URL": fmt.Sprintf("https://%s/s/%s", r.Host, urlToken),
 	})
@@ -71,7 +75,7 @@ func (a *App) HandleShowSecret(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("Cache-Control", "no-store")
-	err := a.render(w, "show", map[string]any{
+	err := a.render(w, "show", "", map[string]any{
 		"Token": token,
 	})
 	if err != nil {
@@ -113,13 +117,9 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 
 	// w.Header().Set("HX-Trigger", "secretPopped")
 	w.Header().Set("Cache-Control", "no-store")
-	t, err := template.ParseFS(templates, "templates/pages/secret_fragment.html")
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	err = t.ExecuteTemplate(w, "secret_fragment.html", map[string]any{
+	err = a.render(w, "show", "secret", map[string]any{
 		"Secret": secret,
+		"Token":  token,
 	})
 	if err != nil {
 		fmt.Fprintf(w, "Error: %s", err)
@@ -141,7 +141,7 @@ func (a *App) Serve() {
 	}
 	mux.Handle("GET /assets/", http.StripPrefix("/assets", http.FileServer(http.FS(subfs))))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		a.render(w, "index", nil)
+		a.render(w, "index", "", nil)
 	})
 	mux.HandleFunc("POST /add", a.HandleAddSecret)
 	mux.HandleFunc("GET /s/{token}", a.HandleShowSecret)

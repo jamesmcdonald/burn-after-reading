@@ -2,10 +2,13 @@
 
 {{define "content"}}
     <p class="mb-4">Click the button to fetch the secret. It will be deleted immediately.</p>
-    <form id="fetch-form" hx-post="/pop" hx-target="#secret" hx-swap="outerHTML" class="mb-4">
-        <input type="hidden" name="token" value="{{.Token}}">
-        <button type="submit" class="rounded p-2 bg-sky-300 hover:bg-sky-800">Fetch secret</button>
-    </form>
+    <div id="fetch-form">
+        <div id="error" class="text-red-600 mb-4">{{.Error}}</div>
+        <form hx-post="/pop" hx-target="#fetch-form" hx-swap="outerHTML" class="mb-4">
+            <input type="hidden" name="token" value="{{.Token}}">
+            <button type="submit" class="rounded p-2 bg-sky-300 hover:bg-sky-800">Fetch secret</button>
+        </form>
 
-    <pre id="secret" class="p-4 border rounded p-3 text-sm whitespace-pre-wrap">[secret not yet fetched]</pre>
+        <pre id="secret" class="p-4 border rounded p-3 text-sm whitespace-pre-wrap">[secret not yet fetched]</pre>
+    </div>
 {{end}}
