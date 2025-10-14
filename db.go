@@ -57,8 +57,7 @@ func (a *App) Prune(ctx context.Context) (int64, error) {
 
 func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
 	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
+		ticker := time.Tick(interval)
 		for {
 			count, err := a.Prune(ctx)
 			if err != nil {
@@ -68,7 +67,7 @@ func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
+			case <-ticker:
 			}
 		}
 	}()
