@@ -3,7 +3,15 @@
 {{define "content"}}
     <form action="/add" method="post" class="p-8">
       <label for="secret" class="font-bold mb-2">Share a secret</label><br>
-      <textarea id="secret" name="secret" rows="8" cols="80" class="border p-2 w-full"></textarea>
+      <textarea id="secret" name="secret" rows="8" cols="80"
+  class="mt-1 w-full font-mono text-sm leading-6
+         rounded-xl border border-slate-300 bg-white/70 shadow-sm
+         placeholder:text-slate-400
+         focus:outline-none focus:ring-4 focus:ring-indigo-500/20 focus:border-indigo-500
+         disabled:opacity-60 disabled:cursor-not-allowed
+         dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500
+         selection:bg-indigo-500/20
+         p-3 min-h-[10rem] resize-y" ></textarea>
       <br>
       <input type="submit" value="Share" class="rounded p-2 bg-sky-300 hover:bg-sky-800">
     </form>
