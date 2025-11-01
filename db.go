@@ -2,21 +2,11 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"fmt"
 	"log/slog"
 	"time"
-
-	"golang.org/x/crypto/chacha20poly1305"
 )
 
-const (
-	versionByte byte = 1
-	algPGPAES   byte = 0
-	algXChaCha  byte = 1
-)
-
-func (a *App) Create(ctx context.Context) error {
+func (a *App) Migrate(ctx context.Context) error {
 	tx, err := a.DB.Begin(ctx)
 	if err != nil {
 		return err
@@ -73,42 +63,6 @@ func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
 	}()
 }
 
-type token struct {
-	version byte
-	alg     byte
-	locator []byte
-	key     []byte
-}
-
-func (t token) pack() []byte {
-	raw := make([]byte, 0, 1+1+len(t.locator)+len(t.key))
-	raw = append(raw, versionByte)
-	raw = append(raw, t.alg)
-	raw = append(raw, t.locator...)
-	raw = append(raw, t.key...)
-	return raw
-}
-
-func parseToken(tokenBytes []byte) (token, error) {
-	var t token
-	if len(tokenBytes) < 2 {
-		return t, fmt.Errorf("short token")
-	}
-	t.version = tokenBytes[0]
-	if t.version != versionByte {
-		return token{}, fmt.Errorf("unsupported version %d", t.version)
-	}
-	t.alg = tokenBytes[1]
-
-	if len(tokenBytes) < 1+1+16+1 {
-		return t, fmt.Errorf("short token")
-	}
-	t.locator = tokenBytes[2:18]
-	t.key = tokenBytes[18:]
-	//fmt.Printf("%x %x %x %x\n", t.version, t.alg, t.locator, t.key)
-	return t, nil
-}
-
 func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, error) {
 	switch alg {
 	case algPGPAES:
@@ -133,28 +87,15 @@ func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, e
 		t.locator = locator
 		t.key = sharedSecret
 		return t.pack(), nil
-	case algXChaCha:
-		t := token{
-			version: versionByte,
-			alg:     alg,
-		}
-		t.locator = make([]byte, 16)
-		if _, err := rand.Read(t.locator); err != nil {
-			return nil, err
-		}
-		t.key = make([]byte, chacha20poly1305.KeySize)
-		if _, err := rand.Read(t.key); err != nil {
-			return nil, err
-		}
-		aead, err := chacha20poly1305.NewX(t.key)
+	default:
+		t, err := newToken(alg)
 		if err != nil {
 			return nil, err
 		}
-		nonce := make([]byte, aead.NonceSize(), aead.NonceSize()+len(secret)+aead.Overhead())
-		if _, err := rand.Read(nonce); err != nil {
+		encrypted, err := t.encrypt([]byte(secret))
+		if err != nil {
 			return nil, err
 		}
-		encrypted := aead.Seal(nonce, nonce, []byte(secret), t.locator)
 		query := `insert into secret(locator, data) values ($1, $2)`
 		_, err = a.DB.Exec(ctx, query, t.locator, encrypted)
 		if err != nil {
@@ -162,8 +103,6 @@ func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, e
 		}
 		tokenBytes := t.pack()
 		return tokenBytes, nil
-	default:
-		return nil, fmt.Errorf("unsupported algorithm")
 	}
 }
 
@@ -195,7 +134,7 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 			return "", err
 		}
 		return secret, nil
-	case algXChaCha:
+	default:
 		query := `select id, data from secret where locator=$1 for update`
 		result := tx.QueryRow(ctx, query, t.locator)
 		var id int
@@ -204,13 +143,7 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		aead, err := chacha20poly1305.NewX(t.key)
-		if err != nil {
-			return "", err
-		}
-		nonce := data[0:aead.NonceSize()]
-		ciphertext := data[aead.NonceSize():]
-		secret, err := aead.Open(nil, nonce, ciphertext, t.locator)
+		secret, err := t.decrypt(data)
 		if err != nil {
 			return "", err
 		}
@@ -222,7 +155,5 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 			return "", err
 		}
 		return string(secret), nil
-	default:
-		return "", fmt.Errorf("unknown algorithm %d", t.alg)
 	}
 }

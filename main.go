@@ -38,7 +38,7 @@ func main() {
 		DB: conn,
 	}
 
-	err = app.Create(ctx)
+	err = app.Migrate(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to create database: %v\n", err)
 		os.Exit(1)
