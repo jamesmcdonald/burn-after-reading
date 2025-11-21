@@ -13,7 +13,6 @@ before:
     - go generate ./...
     - npm install
     - npm run build
-    - cp node_modules/htmx.org/dist/htmx.min.js public/assets/htmx.min.js
     - go mod tidy
 
 builds:
