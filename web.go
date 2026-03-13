@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
 const MaxSecretSize = 1 << 16
@@ -138,6 +141,31 @@ func (a *App) HandlePopSecret(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *App) HandleHealthz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, `{"status":"ok"}`)
+}
+
+func (a *App) HandleReadyz(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	timeout := 2 * time.Second
+	ctx, cancel := context.WithTimeout(r.Context(), timeout)
+	defer cancel()
+	if err := a.DB.Ping(ctx); err != nil {
+		slog.Error("database ping failed", "error", err)
+		w.WriteHeader(http.StatusServiceUnavailable)
+		err = json.NewEncoder(w).Encode(map[string]any{
+			"status": "error",
+			"error":  err.Error(),
+		})
+		if err != nil {
+			slog.Error("failed to write ping error response", "error", err)
+		}
+		return
+	}
+	fmt.Fprint(w, `{"status":"ok"}`)
+}
+
 //go:embed templates/*
 var templates embed.FS
 
@@ -158,5 +186,7 @@ func (a *App) Serve() {
 	mux.HandleFunc("POST /add", a.HandleAddSecret)
 	mux.HandleFunc("GET /s/{token}", a.HandleShowSecret)
 	mux.HandleFunc("POST /pop", a.HandlePopSecret)
+	mux.HandleFunc("/healthz", a.HandleHealthz)
+	mux.HandleFunc("/readyz", a.HandleReadyz)
 	http.ListenAndServe(":8080", mux)
 }
