@@ -3,10 +3,10 @@
 package main
 
 import (
-	"html/template"
 	"os"
 	"os/exec"
 	"strings"
+	"text/template"
 )
 
 const tmpl = `package {{.Package}}
