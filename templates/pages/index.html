@@ -2,6 +2,9 @@
 
 {{define "content"}}
     <form action="/add" method="post" class="p-8">
+{{ if .Error }}
+      <div id="error" class="text-red-600 mb-4">{{ .Error }}</div>
+{{ end }}
       <label for="secret" class="font-bold mb-2">Share a secret</label><br>
       <textarea id="secret" name="secret" rows="8" cols="80"
   class="mt-1 w-full font-mono text-sm leading-6
@@ -11,7 +14,7 @@
          disabled:opacity-60 disabled:cursor-not-allowed
          dark:bg-slate-900/60 dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500
          selection:bg-indigo-500/20
-         p-3 min-h-[10rem] resize-y" ></textarea>
+         p-3 min-h-[10rem] resize-y" >{{ .Secret }}</textarea>
       <br>
       <input type="submit" value="Share" class="rounded p-2 bg-sky-300 hover:bg-sky-800">
     </form>

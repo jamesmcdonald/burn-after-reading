@@ -8,14 +8,20 @@ import (
 	"html/template"
 	"log/slog"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"sync/atomic"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type App struct {
 	DB           *pgxpool.Pool
 	BaseTemplate *template.Template
+	Ready        atomic.Bool
 }
 
 //go:generate go run genversion.go
@@ -40,23 +46,17 @@ func main() {
 		*migrationPassword = cmp.Or(os.Getenv("PGMIGRATIONPASSWORD"), *password)
 	}
 
-	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer cancel()
 
-	if *migrationUser != *user {
-		conn, err := pgxpool.New(ctx, fmt.Sprintf("application_name=burn-after-reading user=%s password=%s", *migrationUser, *migrationPassword))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to connect to database for migration: %v\n", err)
-			os.Exit(1)
-		}
-		app := App{DB: conn}
-		if err = app.Migrate(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to migrate database: %v\n", err)
-			os.Exit(1)
-		}
-		conn.Close()
+	conf, err := pgxpool.ParseConfig("application_name=burn-after-reading")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Unable to parse database config: %v\n", err)
+		os.Exit(1)
 	}
-
-	conn, err := pgxpool.New(ctx, fmt.Sprintf("application_name=burn-after-reading user=%s password=%s", *user, *password))
+	conf.ConnConfig.User = *user
+	conf.ConnConfig.Password = *password
+	conn, err := pgxpool.NewWithConfig(ctx, conf)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v\n", err)
 		os.Exit(1)
@@ -65,13 +65,37 @@ func main() {
 
 	app := App{DB: conn}
 
-	if *migrationUser == *user {
-		if err = app.Migrate(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "Unable to migrate database: %v\n", err)
-			os.Exit(1)
-		}
-	}
+	serveErr := make(chan error, 1)
+	go func() { serveErr <- app.Serve(ctx) }()
 
-	app.StartPruner(ctx, 1*time.Hour)
-	app.Serve()
+	// Migration
+	if err = retry(ctx, "startup", func(ctx context.Context) error {
+		conf, err := pgx.ParseConfig("application_name=burn-after-reading")
+		if err != nil {
+			return fmt.Errorf("unable to parse migration config: %w", err)
+		}
+		conf.User = *migrationUser
+		conf.Password = *migrationPassword
+		conn, err := pgx.ConnectConfig(ctx, conf)
+		if err != nil {
+			return fmt.Errorf("unable to connect to database for migration: %w", err)
+		}
+		defer conn.Close(ctx)
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("unable to connect to start migration transaction: %w", err)
+		}
+		defer tx.Rollback(ctx)
+		if err = migrate(ctx, tx); err != nil {
+			return fmt.Errorf("unable to migrate database: %w", err)
+		}
+		return nil
+	}); err == nil {
+		app.Ready.Store(true)
+		app.StartPruner(ctx, 1*time.Hour)
+	}
+	if err = <-serveErr; err != nil {
+		fmt.Fprintf(os.Stdout, "serve error: %v", err)
+		os.Exit(1)
+	}
 }

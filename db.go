@@ -2,18 +2,35 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
-func (a *App) Migrate(ctx context.Context) error {
-	tx, err := a.DB.Begin(ctx)
-	if err != nil {
-		return err
+// errSecretNotFound covers every way a token can fail to match a stored
+// secret: unknown locator, wrong key or a malformed token. They are
+// deliberately indistinguishable to the user.
+var errSecretNotFound = errors.New("secret not found")
+
+// notFoundOr wraps errors that mean "this token doesn't match a secret" in
+// errSecretNotFound and passes everything else through unchanged.
+func notFoundOr(err error) error {
+	var pgErr *pgconn.PgError
+	// 39000 is pgcrypto's "Wrong key or corrupt data"
+	if errors.Is(err, pgx.ErrNoRows) || (errors.As(err, &pgErr) && pgErr.Code == "39000") {
+		return fmt.Errorf("%w: %w", errSecretNotFound, err)
 	}
+	return err
+}
+
+func migrate(ctx context.Context, tx pgx.Tx) error {
 	defer tx.Rollback(ctx)
 
-	_, err = tx.Exec(ctx, `create extension if not exists pgcrypto`)
+	_, err := tx.Exec(ctx, `create extension if not exists pgcrypto`)
 	if err != nil {
 		return err
 	}
@@ -49,11 +66,17 @@ func (a *App) StartPruner(ctx context.Context, interval time.Duration) {
 	go func() {
 		ticker := time.Tick(interval)
 		for {
-			count, err := a.Prune(ctx)
-			if err != nil {
+			pruneCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+			count, err := a.Prune(pruneCtx)
+			cancel()
+			switch {
+			case ctx.Err() != nil:
+				return // shutting down
+			case err != nil:
 				slog.Error("Failed to prune", "error", err)
+			default:
+				slog.Debug("Pruned expired secrets", "count", count, "interval", interval)
 			}
-			slog.Debug("Pruned expired secrets", "count", count, "interval", interval)
 			select {
 			case <-ctx.Done():
 				return
@@ -106,10 +129,29 @@ func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, e
 	}
 }
 
+// CheckSecret returns nil if a secret is stored for the token,
+// errSecretNotFound if not, or the underlying error if it couldn't tell. It
+// doesn't decrypt or consume the secret.
+func (a *App) CheckSecret(ctx context.Context, token string) error {
+	t, err := parseToken([]byte(token))
+	if err != nil {
+		return fmt.Errorf("%w: %w", errSecretNotFound, err)
+	}
+	var exists bool
+	err = a.DB.QueryRow(ctx, `select exists(select 1 from secret where locator = $1)`, t.locator).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errSecretNotFound
+	}
+	return nil
+}
+
 func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 	t, err := parseToken([]byte(token))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %w", errSecretNotFound, err)
 	}
 	tx, err := a.DB.Begin(ctx)
 	if err != nil {
@@ -124,7 +166,7 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 		var secret string
 		err = result.Scan(&id, &secret)
 		if err != nil {
-			return "", err
+			return "", notFoundOr(err)
 		}
 		_, err = tx.Exec(ctx, `delete from secret where id = $1`, id)
 		if err != nil {
@@ -141,11 +183,12 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 		var data []byte
 		err = result.Scan(&id, &data)
 		if err != nil {
-			return "", err
+			return "", notFoundOr(err)
 		}
 		secret, err := t.decrypt(data)
 		if err != nil {
-			return "", err
+			// A wrong key fails authentication
+			return "", fmt.Errorf("%w: %w", errSecretNotFound, err)
 		}
 		_, err = tx.Exec(ctx, `delete from secret where id = $1`, id)
 		if err != nil {

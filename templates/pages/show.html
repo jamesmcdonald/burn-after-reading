@@ -18,6 +18,10 @@
 {{end}}
 
 {{define "content"}}
+{{ if .Error }}
+    <div id="error" class="text-red-600 mb-4">{{ .Error }}</div>
+{{ else }}
     <p class="mb-4">Click the button to fetch the secret. It will be deleted immediately.</p>
 {{template "secret" .}}
+{{ end }}
 {{end}}
