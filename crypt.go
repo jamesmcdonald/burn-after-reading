@@ -13,6 +13,18 @@ const (
 	algXChaCha  byte = 1
 )
 
+// algName is the alg's name for metrics labels.
+func algName(alg byte) string {
+	switch alg {
+	case algPGPAES:
+		return "pgp-aes"
+	case algXChaCha:
+		return "xchacha20-poly1305"
+	default:
+		return "unknown"
+	}
+}
+
 type token struct {
 	version byte
 	alg     byte

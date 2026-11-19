@@ -67,6 +67,12 @@ func main() {
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- app.Serve(ctx) }()
+	go func() {
+		// Not fatal: losing metrics shouldn't take the app down
+		if err := ServeMetrics(ctx); err != nil {
+			slog.Error("metrics server failed", "error", err)
+		}
+	}()
 
 	// Migration
 	if err = retry(ctx, "startup", func(ctx context.Context) error {

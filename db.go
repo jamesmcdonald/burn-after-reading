@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -59,6 +60,7 @@ func (a *App) Prune(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	count := res.RowsAffected()
+	secretsExpired.Add(float64(count))
 	return count, nil
 }
 
@@ -109,6 +111,8 @@ func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, e
 		}
 		t.locator = locator
 		t.key = sharedSecret
+		secretsCreated.WithLabelValues(algName(t.alg)).Inc()
+		logSecretEvent("secret created", t, len(secret))
 		return t.pack(), nil
 	default:
 		t, err := newToken(alg)
@@ -124,9 +128,16 @@ func (a *App) AddSecret(ctx context.Context, secret string, alg byte) ([]byte, e
 		if err != nil {
 			return nil, err
 		}
-		tokenBytes := t.pack()
-		return tokenBytes, nil
+		secretsCreated.WithLabelValues(algName(t.alg)).Inc()
+		logSecretEvent("secret created", t, len(secret))
+		return t.pack(), nil
 	}
+}
+
+// logSecretEvent logs what happened to a secret. It must never log the key or
+// the secret itself; the locator is just the random ID in the database.
+func logSecretEvent(msg string, t token, size int) {
+	slog.Info(msg, "locator", hex.EncodeToString(t.locator), "alg", t.alg, "bytes", size)
 }
 
 // CheckSecret returns nil if a secret is stored for the token,
@@ -175,6 +186,8 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 		if err := tx.Commit(ctx); err != nil {
 			return "", err
 		}
+		secretsConsumed.WithLabelValues(algName(t.alg)).Inc()
+		logSecretEvent("secret consumed", t, len(secret))
 		return secret, nil
 	default:
 		query := `select id, data from secret where locator=$1 for update`
@@ -197,6 +210,8 @@ func (a *App) PopSecret(ctx context.Context, token string) (string, error) {
 		if err := tx.Commit(ctx); err != nil {
 			return "", err
 		}
+		secretsConsumed.WithLabelValues(algName(t.alg)).Inc()
+		logSecretEvent("secret consumed", t, len(secret))
 		return string(secret), nil
 	}
 }

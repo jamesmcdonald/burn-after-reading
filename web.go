@@ -261,7 +261,11 @@ func (a *App) Serve(ctx context.Context) error {
 	mux.HandleFunc("/healthz", a.HandleHealthz)
 	mux.HandleFunc("/readyz", a.HandleReadyz)
 
-	server := &http.Server{Addr: ":8080", Handler: mux}
+	return runServer(ctx, &http.Server{Addr: ":8080", Handler: mux})
+}
+
+// runServer serves until ctx is cancelled, then shuts down gracefully.
+func runServer(ctx context.Context, server *http.Server) error {
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.ListenAndServe() }()
 
